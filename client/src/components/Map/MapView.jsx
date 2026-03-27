@@ -160,7 +160,7 @@ function MapClickHandler({ onClick }) {
 }
 
 // ── Route travel time label ──
-function RouteLabel({ midpoint, walkingText, drivingText }) {
+function RouteLabel({ midpoint, distanceText, walkingText, drivingText }) {
   const map = useMap()
   const [visible, setVisible] = useState(map ? map.getZoom() >= 12 : false)
 
@@ -186,6 +186,7 @@ function RouteLabel({ midpoint, walkingText, drivingText }) {
       pointer-events:none;
       position:relative;left:-50%;top:-50%;
     ">
+      ${distanceText ? `<span>${distanceText}</span><span style="opacity:0.3">|</span>` : ''}
       <span style="display:flex;align-items:center;gap:2px">
         <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="2"/><path d="M7 21l3-7"/><path d="M10 14l5-5"/><path d="M15 9l-4 7"/><path d="M18 18l-3-7"/></svg>
         ${walkingText}
@@ -402,11 +403,10 @@ export function MapView({
             positions={route}
             color="#111827"
             weight={3}
-            opacity={0.9}
-            dashArray="6, 5"
+            opacity={0.8}
           />
           {routeSegments.map((seg, i) => (
-            <RouteLabel key={i} midpoint={seg.mid} from={seg.from} to={seg.to} walkingText={seg.walkingText} drivingText={seg.drivingText} />
+            <RouteLabel key={i} midpoint={seg.mid} distanceText={seg.distanceText} walkingText={seg.walkingText} drivingText={seg.drivingText} />
           ))}
         </>
       )}

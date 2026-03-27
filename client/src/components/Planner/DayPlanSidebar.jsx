@@ -169,41 +169,44 @@ export default function DayPlanSidebar({
     return () => document.removeEventListener('dragend', cleanup)
   }, [])
 
-  // Auto-compute distances between consecutive places for expanded days
+  // Auto-compute distances between consecutive places for all expanded days
   useEffect(() => {
-    if (!selectedDayId || !expandedDays.has(selectedDayId)) return
-    const da = getDayAssignments(selectedDayId)
-    const withCoords = da.filter(a => a.place?.lat && a.place?.lng)
-    const waypoints = withCoords.map(a => ({ lat: a.place.lat, lng: a.place.lng }))
-    if (waypoints.length < 2) { setSegmentDistances(prev => ({ ...prev, [selectedDayId]: null })); return }
+    const controllers = []
+    const expandedIds = [...expandedDays]
 
-    // Build cache key from place IDs in order to avoid refetching same data
-    const cacheKey = withCoords.map(a => a.place.id).join('-')
-    const existing = segmentDistances[selectedDayId]
-    if (existing && existing._cacheKey === cacheKey) return
+    expandedIds.forEach(dayId => {
+      const da = getDayAssignments(dayId)
+      const withCoords = da.filter(a => a.place?.lat && a.place?.lng)
+      const waypoints = withCoords.map(a => ({ lat: a.place.lat, lng: a.place.lng }))
+      if (waypoints.length < 2) { setSegmentDistances(prev => ({ ...prev, [dayId]: null })); return }
 
-    const ctrl = new AbortController()
-    setSegmentDistances(prev => ({ ...prev, [selectedDayId]: { _loading: true, _cacheKey: cacheKey, byPair: {} } }))
+      const cacheKey = withCoords.map(a => a.place.id).join('-')
+      const existing = segmentDistances[dayId]
+      if (existing && existing._cacheKey === cacheKey) return
 
-    calculateSegments(waypoints, { signal: ctrl.signal })
-      .then(segments => {
-        // Key segments by "fromPlaceId-toPlaceId" for easy lookup
-        const byPair = {}
-        segments.forEach((seg, i) => {
-          const fromId = withCoords[i].place.id
-          const toId = withCoords[i + 1].place.id
-          byPair[`${fromId}-${toId}`] = seg
+      const ctrl = new AbortController()
+      controllers.push(ctrl)
+      setSegmentDistances(prev => ({ ...prev, [dayId]: { _loading: true, _cacheKey: cacheKey, byPair: {} } }))
+
+      calculateSegments(waypoints, { signal: ctrl.signal })
+        .then(segments => {
+          const byPair = {}
+          segments.forEach((seg, i) => {
+            const fromId = withCoords[i].place.id
+            const toId = withCoords[i + 1].place.id
+            byPair[`${fromId}-${toId}`] = seg
+          })
+          setSegmentDistances(prev => ({ ...prev, [dayId]: { _loading: false, _cacheKey: cacheKey, byPair } }))
         })
-        setSegmentDistances(prev => ({ ...prev, [selectedDayId]: { _loading: false, _cacheKey: cacheKey, byPair } }))
-      })
-      .catch(err => {
-        if (err.name !== 'AbortError') {
-          setSegmentDistances(prev => ({ ...prev, [selectedDayId]: { _loading: false, _cacheKey: cacheKey, byPair: {} } }))
-        }
-      })
+        .catch(err => {
+          if (err.name !== 'AbortError') {
+            setSegmentDistances(prev => ({ ...prev, [dayId]: { _loading: false, _cacheKey: cacheKey, byPair: {} } }))
+          }
+        })
+    })
 
-    return () => ctrl.abort()
-  }, [selectedDayId, expandedDays, assignments])
+    return () => controllers.forEach(c => c.abort())
+  }, [expandedDays, assignments])
 
   const toggleDay = (dayId, e) => {
     e.stopPropagation()
@@ -678,7 +681,7 @@ export default function DayPlanSidebar({
 
                         return (
                           <React.Fragment key={`place-${assignment.id}`}>
-                            {coordIdx > 0 && isSelected && (
+                            {coordIdx > 0 && (
                               <div style={{
                                 display: 'flex', alignItems: 'center', gap: 6,
                                 padding: '3px 10px 3px 30px',

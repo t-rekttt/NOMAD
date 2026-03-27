@@ -199,16 +199,23 @@ export default function TripPlannerPage() {
     const waypoints = da.map(a => a.place).filter(p => p?.lat && p?.lng)
     if (waypoints.length < 2) { setRoute(null); setRouteSegments([]); return }
 
+    // Fallback to straight lines immediately
     setRoute(waypoints.map(p => [p.lat, p.lng]))
     if (!routeCalcEnabled) { setRouteSegments([]); return }
 
-    // Single OSRM request for all segments
     const controller = new AbortController()
     routeAbortRef.current = controller
 
     try {
-      const segments = await calculateSegments(waypoints, { signal: controller.signal })
-      if (!controller.signal.aborted) setRouteSegments(segments)
+      // Fetch actual road path + per-leg segments in parallel
+      const [routeResult, segments] = await Promise.all([
+        calculateRoute(waypoints, 'driving', { signal: controller.signal }),
+        calculateSegments(waypoints, { signal: controller.signal }),
+      ])
+      if (!controller.signal.aborted) {
+        setRoute(routeResult.coordinates)
+        setRouteSegments(segments)
+      }
     } catch (err) {
       if (err.name !== 'AbortError') setRouteSegments([])
     }
