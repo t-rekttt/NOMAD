@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Footprints } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { downloadTripPDF } from '../PDF/TripPDF'
-import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
+import { calculateRoute, calculateSegments, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
 import WeatherWidget from '../Weather/WeatherWidget'
@@ -116,6 +116,9 @@ export default function DayPlanSidebar({
 
   const currency = trip?.currency || 'EUR'
 
+  // Distance between consecutive places per day
+  const [segmentDistances, setSegmentDistances] = useState({}) // { [dayId]: { _loading, _cacheKey, byPair: { "fromId-toId": segment } } }
+
   // Drag-Daten aus dataTransfer, Ref oder window lesen (dataTransfer geht bei Re-Render verloren)
   const getDragData = (e) => {
     const dt = e?.dataTransfer
@@ -165,6 +168,42 @@ export default function DayPlanSidebar({
     document.addEventListener('dragend', cleanup)
     return () => document.removeEventListener('dragend', cleanup)
   }, [])
+
+  // Auto-compute distances between consecutive places for expanded days
+  useEffect(() => {
+    if (!selectedDayId || !expandedDays.has(selectedDayId)) return
+    const da = getDayAssignments(selectedDayId)
+    const withCoords = da.filter(a => a.place?.lat && a.place?.lng)
+    const waypoints = withCoords.map(a => ({ lat: a.place.lat, lng: a.place.lng }))
+    if (waypoints.length < 2) { setSegmentDistances(prev => ({ ...prev, [selectedDayId]: null })); return }
+
+    // Build cache key from place IDs in order to avoid refetching same data
+    const cacheKey = withCoords.map(a => a.place.id).join('-')
+    const existing = segmentDistances[selectedDayId]
+    if (existing && existing._cacheKey === cacheKey) return
+
+    const ctrl = new AbortController()
+    setSegmentDistances(prev => ({ ...prev, [selectedDayId]: { _loading: true, _cacheKey: cacheKey, byPair: {} } }))
+
+    calculateSegments(waypoints, { signal: ctrl.signal })
+      .then(segments => {
+        // Key segments by "fromPlaceId-toPlaceId" for easy lookup
+        const byPair = {}
+        segments.forEach((seg, i) => {
+          const fromId = withCoords[i].place.id
+          const toId = withCoords[i + 1].place.id
+          byPair[`${fromId}-${toId}`] = seg
+        })
+        setSegmentDistances(prev => ({ ...prev, [selectedDayId]: { _loading: false, _cacheKey: cacheKey, byPair } }))
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          setSegmentDistances(prev => ({ ...prev, [selectedDayId]: { _loading: false, _cacheKey: cacheKey, byPair: {} } }))
+        }
+      })
+
+    return () => ctrl.abort()
+  }, [selectedDayId, expandedDays, assignments])
 
   const toggleDay = (dayId, e) => {
     e.stopPropagation()
@@ -630,8 +669,39 @@ export default function DayPlanSidebar({
                           onReorder(day.id, ids)
                         }
 
+                        const daySegments = segmentDistances[day.id]
+                        const coordPlaceItems = placeItems.filter(i => i.data.place?.lat && i.data.place?.lng)
+                        const coordIdx = coordPlaceItems.findIndex(i => i.data.id === assignment.id)
+                        const prevCoordPlace = coordIdx > 0 ? coordPlaceItems[coordIdx - 1]?.data?.place : null
+                        const pairKey = prevCoordPlace && place?.lat && place?.lng ? `${prevCoordPlace.id}-${place.id}` : null
+                        const segData = pairKey && daySegments?.byPair?.[pairKey]
+
                         return (
                           <React.Fragment key={`place-${assignment.id}`}>
+                            {coordIdx > 0 && isSelected && (
+                              <div style={{
+                                display: 'flex', alignItems: 'center', gap: 6,
+                                padding: '3px 10px 3px 30px',
+                                fontSize: 10, color: 'var(--text-faint)',
+                                fontFamily: '-apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+                              }}>
+                                <div style={{
+                                  width: 1, height: 12, borderLeft: '1.5px dotted var(--border-primary)',
+                                  flexShrink: 0,
+                                }} />
+                                {daySegments?._loading ? (
+                                  <span style={{ opacity: 0.5 }}>...</span>
+                                ) : segData ? (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <span>{segData.distanceText}</span>
+                                    <span style={{ opacity: 0.3 }}>·</span>
+                                    <span title="Walking" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Footprints size={9} strokeWidth={2} /> {segData.walkingText}</span>
+                                    <span style={{ opacity: 0.3 }}>·</span>
+                                    <span title="Driving" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Car size={9} strokeWidth={2} /> {segData.drivingText}</span>
+                                  </span>
+                                ) : null}
+                              </div>
+                            )}
                             {showDropLine && <div style={{ height: 2, background: 'var(--text-primary)', borderRadius: 1, margin: '2px 8px' }} />}
                           <div
                             draggable

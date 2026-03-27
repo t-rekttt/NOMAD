@@ -124,13 +124,15 @@ export async function calculateSegments(waypoints, { signal } = {}) {
     const walkingDuration = leg.distance / (5000 / 3600) // 5 km/h
     return {
       mid, from, to,
+      distance: leg.distance,
+      distanceText: formatDistance(leg.distance),
       walkingText: formatDuration(walkingDuration),
       drivingText: formatDuration(leg.duration),
     }
   })
 }
 
-function formatDistance(meters) {
+export function formatDistance(meters) {
   if (meters < 1000) {
     return `${Math.round(meters)} m`
   }
