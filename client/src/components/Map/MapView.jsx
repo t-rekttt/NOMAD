@@ -203,6 +203,57 @@ function RouteLabel({ midpoint, walkingText, drivingText }) {
   return <Marker position={midpoint} icon={icon} interactive={false} zIndexOffset={2000} />
 }
 
+// ── Great-circle interpolation for flight arcs ──
+function greatCirclePoints(from, to, numPoints = 24) {
+  const toRad = d => d * Math.PI / 180
+  const toDeg = r => r * 180 / Math.PI
+  const [lat1, lng1] = [toRad(from[0]), toRad(from[1])]
+  const [lat2, lng2] = [toRad(to[0]), toRad(to[1])]
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat1 - lat2) / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin((lng1 - lng2) / 2) ** 2
+  ))
+  if (d < 1e-10) return [from, to]
+  const points = []
+  for (let i = 0; i <= numPoints; i++) {
+    const f = i / numPoints
+    const A = Math.sin((1 - f) * d) / Math.sin(d)
+    const B = Math.sin(f * d) / Math.sin(d)
+    const x = A * Math.cos(lat1) * Math.cos(lng1) + B * Math.cos(lat2) * Math.cos(lng2)
+    const y = A * Math.cos(lat1) * Math.sin(lng1) + B * Math.cos(lat2) * Math.sin(lng2)
+    const z = A * Math.sin(lat1) + B * Math.sin(lat2)
+    points.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))])
+  }
+  return points
+}
+
+const planeIcon = L.divIcon({
+  className: '',
+  html: '<div style="font-size:16px;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.3));line-height:1">✈️</div>',
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+})
+
+function FlightArc({ from, to, title, departureName, destinationName }) {
+  const points = useMemo(() => greatCirclePoints(from, to), [from, to])
+  const mid = points[Math.floor(points.length / 2)]
+  return (
+    <>
+      <Polyline positions={points} color="#3b82f6" weight={2.5} opacity={0.7} dashArray="8, 4" />
+      <Marker position={mid} icon={planeIcon} interactive zIndexOffset={1500}>
+        <Tooltip direction="top" offset={[0, -10]} opacity={1} className="map-tooltip">
+          <div style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif" }}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: 'var(--text-primary)' }}>{title}</div>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+              {departureName} → {destinationName}
+            </div>
+          </div>
+        </Tooltip>
+      </Marker>
+    </>
+  )
+}
+
 // Module-level photo cache shared with PlaceAvatar
 const mapPhotoCache = new Map()
 
@@ -211,6 +262,7 @@ export function MapView({
   dayPlaces = [],
   route = null,
   routeSegments = [],
+  flightArcs = [],
   selectedPlaceId = null,
   onMarkerClick,
   onMapClick,
@@ -356,6 +408,10 @@ export function MapView({
           ))}
         </>
       )}
+
+      {flightArcs.map(arc => (
+        <FlightArc key={arc.id} {...arc} />
+      ))}
     </MapContainer>
   )
 }

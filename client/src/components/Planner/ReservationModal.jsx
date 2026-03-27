@@ -1,11 +1,12 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import Modal from '../shared/Modal'
 import CustomSelect from '../shared/CustomSelect'
-import { Plane, Hotel, Utensils, Train, Car, Ship, Ticket, FileText, Users, Paperclip, X, ExternalLink, Link2 } from 'lucide-react'
+import { Plane, Hotel, Utensils, Train, Car, Ship, Ticket, FileText, Users, Paperclip, X, ExternalLink, Link2, MapPin, Search } from 'lucide-react'
 import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import CustomTimePicker from '../shared/CustomTimePicker'
+import { mapsApi } from '../../api/client'
 
 const TYPE_OPTIONS = [
   { value: 'flight',     labelKey: 'reservations.type.flight',     Icon: Plane },
@@ -45,6 +46,107 @@ function buildAssignmentOptions(days, assignments, t, locale) {
   return options
 }
 
+function LocationSearchInput({ label, value, onChange, placeholder, inputStyle, labelStyle }) {
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState([])
+  const [isOpen, setIsOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const timerRef = useRef(null)
+  const wrapperRef = useRef(null)
+
+  useEffect(() => {
+    setQuery(value?.name || '')
+  }, [value?.name])
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  const handleSearch = useCallback((q) => {
+    setQuery(q)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    if (!q || q.length < 2) { setResults([]); setIsOpen(false); return }
+    timerRef.current = setTimeout(async () => {
+      setIsLoading(true)
+      try {
+        const data = await mapsApi.search(q)
+        setResults(data.places || [])
+        setIsOpen(true)
+      } catch { setResults([]) }
+      finally { setIsLoading(false) }
+    }, 300)
+  }, [])
+
+  const handleSelect = (place) => {
+    onChange({ name: place.name, lat: place.lat, lng: place.lng })
+    setQuery(place.name)
+    setIsOpen(false)
+    setResults([])
+  }
+
+  const handleClear = () => {
+    onChange(null)
+    setQuery('')
+    setResults([])
+  }
+
+  return (
+    <div ref={wrapperRef} style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+      <label style={labelStyle}>
+        <MapPin size={10} style={{ display: 'inline', verticalAlign: '-1px', marginRight: 3 }} />
+        {label}
+      </label>
+      <div style={{ position: 'relative' }}>
+        <input
+          type="text"
+          value={query}
+          onChange={e => handleSearch(e.target.value)}
+          onFocus={() => { if (results.length > 0) setIsOpen(true) }}
+          placeholder={placeholder}
+          style={{ ...inputStyle, paddingRight: value?.lat ? 28 : 12 }}
+        />
+        {isLoading && (
+          <Search size={12} style={{ position: 'absolute', right: value?.lat ? 28 : 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-faint)', opacity: 0.5 }} />
+        )}
+        {value?.lat && (
+          <button type="button" onClick={handleClear} style={{
+            position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', display: 'flex', padding: 2,
+          }}>
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      {isOpen && results.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+          background: 'var(--bg-card)', border: '1px solid var(--border-primary)',
+          borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+        }}>
+          {results.map((place, i) => (
+            <button key={i} type="button" onClick={() => handleSelect(place)} style={{
+              display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px',
+              border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              borderBottom: i < results.length - 1 ? '1px solid var(--border-secondary)' : 'none',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+            >
+              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-primary)' }}>{place.name}</div>
+              {place.address && <div style={{ fontSize: 10, color: 'var(--text-faint)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{place.address}</div>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ReservationModal({ isOpen, onClose, onSave, reservation, days, places, assignments, selectedDayId, files = [], onFileUpload, onFileDelete }) {
   const toast = useToast()
   const { t, locale } = useTranslation()
@@ -54,6 +156,8 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
     title: '', type: 'other', status: 'pending',
     reservation_time: '', location: '', confirmation_number: '',
     notes: '', assignment_id: '',
+    departure: { name: '', lat: null, lng: null },
+    destination: { name: '', lat: null, lng: null },
   })
   const [isSaving, setIsSaving] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
@@ -76,12 +180,16 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
         confirmation_number: reservation.confirmation_number || '',
         notes: reservation.notes || '',
         assignment_id: reservation.assignment_id || '',
+        departure: { name: reservation.departure_name || '', lat: reservation.departure_lat || null, lng: reservation.departure_lng || null },
+        destination: { name: reservation.destination_name || '', lat: reservation.destination_lat || null, lng: reservation.destination_lng || null },
       })
     } else {
       setForm({
         title: '', type: 'other', status: 'pending',
         reservation_time: '', reservation_end_time: '', location: '', confirmation_number: '',
         notes: '', assignment_id: '',
+        departure: { name: '', lat: null, lng: null },
+        destination: { name: '', lat: null, lng: null },
       })
       setPendingFiles([])
     }
@@ -94,9 +202,16 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
     if (!form.title.trim()) return
     setIsSaving(true)
     try {
+      const { departure, destination, ...rest } = form
       const saved = await onSave({
-        ...form,
+        ...rest,
         assignment_id: form.assignment_id || null,
+        departure_name: departure?.name || null,
+        departure_lat: departure?.lat || null,
+        departure_lng: departure?.lng || null,
+        destination_name: destination?.name || null,
+        destination_lat: destination?.lat || null,
+        destination_lng: destination?.lng || null,
       })
       if (!reservation?.id && saved?.id && pendingFiles.length > 0) {
         for (const file of pendingFiles) {
@@ -174,6 +289,28 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
           <input type="text" value={form.title} onChange={e => set('title', e.target.value)} required
             placeholder={t('reservations.titlePlaceholder')} style={inputStyle} />
         </div>
+
+        {/* Flight departure/destination pickers */}
+        {form.type === 'flight' && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <LocationSearchInput
+              label={t('reservations.departure')}
+              value={form.departure}
+              onChange={v => set('departure', v || { name: '', lat: null, lng: null })}
+              placeholder={t('reservations.departurePlaceholder')}
+              inputStyle={inputStyle}
+              labelStyle={labelStyle}
+            />
+            <LocationSearchInput
+              label={t('reservations.destination')}
+              value={form.destination}
+              onChange={v => set('destination', v || { name: '', lat: null, lng: null })}
+              placeholder={t('reservations.destinationPlaceholder')}
+              inputStyle={inputStyle}
+              labelStyle={labelStyle}
+            />
+          </div>
+        )}
 
         {/* Assignment Picker + Date */}
         <div style={{ display: 'flex', gap: 8 }}>

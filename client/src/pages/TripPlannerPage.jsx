@@ -376,6 +376,19 @@ export default function TripPlannerPage() {
     return da.map(a => a.place).filter(p => p?.lat && p?.lng)
   }, [selectedDayId, assignments])
 
+  const flightArcs = useMemo(() => {
+    return (reservations || [])
+      .filter(r => r.type === 'flight' && r.departure_lat && r.destination_lat)
+      .map(r => ({
+        id: r.id,
+        title: r.title,
+        from: [r.departure_lat, r.departure_lng],
+        to: [r.destination_lat, r.destination_lng],
+        departureName: r.departure_name,
+        destinationName: r.destination_name,
+      }))
+  }, [reservations])
+
   const mapTileUrl = settings.map_tile_url || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
   const defaultCenter = [settings.default_lat || 48.8566, settings.default_lng || 2.3522]
   const defaultZoom = settings.default_zoom || 10
@@ -444,6 +457,7 @@ export default function TripPlannerPage() {
               dayPlaces={dayPlaces}
               route={route}
               routeSegments={routeSegments}
+              flightArcs={flightArcs}
               selectedPlaceId={selectedPlaceId}
               onMarkerClick={handleMarkerClick}
               onMapClick={handleMapClick}

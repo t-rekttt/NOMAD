@@ -188,6 +188,12 @@ function initDb() {
       notes TEXT,
       status TEXT DEFAULT 'pending',
       type TEXT DEFAULT 'other',
+      departure_name TEXT,
+      departure_lat REAL,
+      departure_lng REAL,
+      destination_name TEXT,
+      destination_lat REAL,
+      destination_lng REAL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -610,6 +616,15 @@ function initDb() {
     // 28: Add end_time to reservations
     () => {
       try { _db.exec('ALTER TABLE reservations ADD COLUMN reservation_end_time TEXT'); } catch {}
+    },
+    // 31: Flight departure/destination location fields
+    () => {
+      try { _db.exec('ALTER TABLE reservations ADD COLUMN departure_name TEXT'); } catch {}
+      try { _db.exec('ALTER TABLE reservations ADD COLUMN departure_lat REAL'); } catch {}
+      try { _db.exec('ALTER TABLE reservations ADD COLUMN departure_lng REAL'); } catch {}
+      try { _db.exec('ALTER TABLE reservations ADD COLUMN destination_name TEXT'); } catch {}
+      try { _db.exec('ALTER TABLE reservations ADD COLUMN destination_lat REAL'); } catch {}
+      try { _db.exec('ALTER TABLE reservations ADD COLUMN destination_lng REAL'); } catch {}
     },
     // Future migrations go here (append only, never reorder)
   ];
