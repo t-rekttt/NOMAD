@@ -401,11 +401,12 @@ export function MapView({
       {route && route.length > 1 && (
         <>
           <Polyline
+            key={routeIsCalculating ? 'preview' : 'road'}
             positions={route}
             color="#111827"
             weight={3}
             opacity={routeIsCalculating ? 0.4 : 0.8}
-            dashArray={routeIsCalculating ? '8, 6' : undefined}
+            dashArray={routeIsCalculating ? '8, 6' : null}
           />
           {!routeIsCalculating && routeSegments.map((seg, i) => (
             <RouteLabel key={i} midpoint={seg.mid} distanceText={seg.distanceText} walkingText={seg.walkingText} drivingText={seg.drivingText} />
