@@ -389,7 +389,11 @@ export default function TripPlannerPage() {
       }))
   }, [reservations])
 
-  const mapTileUrl = settings.map_tile_url || 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  const isDark = settings.dark_mode === true || settings.dark_mode === 'dark'
+  const defaultTileUrl = isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+  const mapTileUrl = settings.map_tile_url || defaultTileUrl
   const defaultCenter = [settings.default_lat || 48.8566, settings.default_lng || 2.3522]
   const defaultZoom = settings.default_zoom || 10
 
@@ -464,6 +468,7 @@ export default function TripPlannerPage() {
               center={defaultCenter}
               zoom={defaultZoom}
               tileUrl={mapTileUrl}
+              darkMode={isDark}
               fitKey={fitKey}
               dayOrderMap={dayOrderMap}
               leftWidth={leftCollapsed ? 0 : leftWidth}

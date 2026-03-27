@@ -269,6 +269,7 @@ export function MapView({
   center = [48.8566, 2.3522],
   zoom = 10,
   tileUrl = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  darkMode = false,
   fitKey = 0,
   dayOrderMap = {},
   leftWidth = 0,
@@ -313,9 +314,10 @@ export function MapView({
       zoom={zoom}
       zoomControl={false}
       className="w-full h-full"
-      style={{ background: '#e5e7eb' }}
+      style={{ background: darkMode ? '#1a1a2e' : '#e5e7eb' }}
     >
       <TileLayer
+        key={tileUrl}
         url={tileUrl}
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         maxZoom={19}
