@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Footprints } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Check, Trash2, Info, MapPin, Star, Heart, Camera, Lightbulb, Flag, Bookmark, Train, Bus, Plane, Car, Ship, Coffee, ShoppingBag, AlertTriangle, FileDown, Lock, Hotel, Utensils, Users, Footprints, QrCode, Route } from 'lucide-react'
 
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { downloadTripPDF } from '../PDF/TripPDF'
-import { calculateRoute, calculateSegments, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
+import { calculateRoute, calculateSegments, generateGoogleMapsUrl, generateLegUrl, generateQrDataUrl, optimizeRoute } from '../Map/RouteCalculator'
+import { downloadTransportPDF, downloadTripTransportPDF } from '../PDF/TransportPDF'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
 import WeatherWidget from '../Weather/WeatherWidget'
@@ -118,6 +119,7 @@ export default function DayPlanSidebar({
 
   // Distance between consecutive places per day
   const [segmentDistances, setSegmentDistances] = useState({}) // { [dayId]: { _loading, _cacheKey, byPair: { "fromId-toId": segment } } }
+  const [qrPopover, setQrPopover] = useState(null) // { fromPlace, toPlace } or null
 
   // Drag-Daten aus dataTransfer, Ref oder window lesen (dataTransfer geht bei Re-Render verloren)
   const getDragData = (e) => {
@@ -488,6 +490,26 @@ export default function DayPlanSidebar({
             <FileDown size={13} strokeWidth={2} />
             {t('dayplan.pdf')}
           </button>
+          <button
+            onClick={async () => {
+              try {
+                await downloadTripTransportPDF({ trip, days, assignments, t, locale })
+              } catch (e) {
+                console.error('Transport PDF error:', e)
+                toast.error('Transport PDF error: ' + (e?.message || String(e)))
+              }
+            }}
+            title="Transportation instruction PDF"
+            style={{
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5,
+              padding: '5px 10px', borderRadius: 8, border: 'none',
+              background: 'var(--accent)', color: 'var(--accent-text)', fontSize: 11, fontWeight: 500,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >
+            <Route size={13} strokeWidth={2} />
+            Transportation instruction PDF
+          </button>
         </div>
       </div>
 
@@ -701,6 +723,18 @@ export default function DayPlanSidebar({
                                     <span title="Walking" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Footprints size={9} strokeWidth={2} /> {segData.walkingText}</span>
                                     <span style={{ opacity: 0.3 }}>·</span>
                                     <span title="Driving" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Car size={9} strokeWidth={2} /> {segData.drivingText}</span>
+                                    <button
+                                      title="QR Navigation"
+                                      onClick={async () => {
+                                        if (qrPopover?.key === pairKey) { setQrPopover(null); return }
+                                        const url = generateLegUrl(prevCoordPlace, place)
+                                        const qrDataUrl = await generateQrDataUrl(url, 180)
+                                        setQrPopover({ key: pairKey, url, qrDataUrl, from: prevCoordPlace.name, to: place.name })
+                                      }}
+                                      style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', color: qrPopover?.key === pairKey ? 'var(--text-primary)' : 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', lineHeight: 1, borderRadius: 4, marginLeft: 2 }}
+                                    >
+                                      <QrCode size={13} strokeWidth={2} />
+                                    </button>
                                   </span>
                                 ) : null}
                               </div>
@@ -1016,6 +1050,19 @@ export default function DayPlanSidebar({
                         }}>
                           <ExternalLink size={12} strokeWidth={2} />
                         </button>
+                        <button onClick={() => {
+                          const assignments = getDayAssignments(day.id)
+                          const waypoints = assignments.map(a => a.place).filter(p => p?.lat && p?.lng)
+                          if (waypoints.length < 2) return
+                          downloadTransportPDF({ day, waypoints, t, locale })
+                        }} title="Transportation instruction PDF" style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                          padding: '6px 10px', fontSize: 11, fontWeight: 500, borderRadius: 8,
+                          border: 'none', background: 'var(--accent)', color: 'var(--accent-text)', cursor: 'pointer', fontFamily: 'inherit',
+                        }}>
+                          <Route size={12} strokeWidth={2} />
+                          Transport PDF
+                        </button>
                       </div>
                     </div>
                   )}
@@ -1080,6 +1127,38 @@ export default function DayPlanSidebar({
         </div>,
         document.body
       ))}
+
+      {/* QR-Popover */}
+      {qrPopover && ReactDOM.createPortal(
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(3px)',
+        }} onClick={() => setQrPopover(null)}>
+          <div style={{
+            width: 300, background: 'var(--bg-card)', borderRadius: 16,
+            boxShadow: '0 16px 48px rgba(0,0,0,0.22)', padding: '22px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14,
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'center' }}>
+              {qrPopover.from || 'A'} → {qrPopover.to || 'B'}
+            </div>
+            <img src={qrPopover.qrDataUrl} alt="QR" style={{ width: 180, height: 180, borderRadius: 8 }} />
+            <div style={{ fontSize: 10, color: 'var(--text-faint)', textAlign: 'center', wordBreak: 'break-all' }}>
+              Scan to open in Google Maps
+            </div>
+            <a href={qrPopover.url} target="_blank" rel="noopener noreferrer" style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 14px',
+              fontSize: 11, fontWeight: 500, borderRadius: 8, border: '1px solid var(--border-faint)',
+              background: 'transparent', color: 'var(--text-secondary)', textDecoration: 'none',
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>
+              <ExternalLink size={12} strokeWidth={2} /> Open in Google Maps
+            </a>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Budget-Fußzeile */}
       {totalCost > 0 && (

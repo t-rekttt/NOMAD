@@ -132,6 +132,66 @@ export async function calculateSegments(waypoints, { signal } = {}) {
   })
 }
 
+/**
+ * Generate a Google Maps directions URL for a single leg (A → B)
+ */
+export function generateLegUrl(from, to, mode = 'driving') {
+  return `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${mode}`
+}
+
+/**
+ * Generate a QR code as a base64 data URL (local, no network request)
+ */
+export async function generateQrDataUrl(text, size = 200) {
+  const QRCode = (await import('qrcode')).default
+  return QRCode.toDataURL(text, { width: size, margin: 1 })
+}
+
+/**
+ * Calculate per-leg travel times + turn-by-turn steps in a single OSRM request
+ */
+export async function calculateSegmentsWithSteps(waypoints, { signal } = {}) {
+  if (!waypoints || waypoints.length < 2) return []
+
+  const coords = waypoints.map(p => `${p.lng},${p.lat}`).join(';')
+  const url = `${OSRM_BASE}/driving/${coords}?overview=false&geometries=geojson&steps=true&annotations=distance,duration`
+
+  const response = await fetch(url, { signal })
+  if (!response.ok) throw new Error('Route could not be calculated')
+
+  const data = await response.json()
+  if (data.code !== 'Ok' || !data.routes?.[0]) throw new Error('No route found')
+
+  return data.routes[0].legs.map((leg, i) => {
+    const from = { lat: waypoints[i].lat, lng: waypoints[i].lng }
+    const to = { lat: waypoints[i + 1].lat, lng: waypoints[i + 1].lng }
+    const walkingDuration = leg.distance / (5000 / 3600)
+    const steps = (leg.steps || [])
+      .filter(s => s.maneuver?.type !== 'depart' && s.maneuver?.type !== 'arrive')
+      .map(s => {
+        const m = s.maneuver || {}
+        const dir = m.modifier ? m.modifier.replace(/-/g, ' ') : ''
+        const action = m.type === 'turn' ? `Turn ${dir}` :
+          m.type === 'new name' ? `Continue` :
+          m.type === 'roundabout' ? `Take roundabout exit` :
+          m.type === 'merge' ? `Merge ${dir}` :
+          m.type === 'fork' ? `Take ${dir} fork` :
+          `${m.type}${dir ? ' ' + dir : ''}`
+        const street = s.name || ''
+        return { action, street, distance: formatDistance(s.distance) }
+      })
+    return {
+      from, to,
+      distance: leg.distance,
+      distanceText: formatDistance(leg.distance),
+      walkingText: formatDuration(walkingDuration),
+      drivingText: formatDuration(leg.duration),
+      steps,
+      mapsUrl: generateLegUrl(from, to),
+    }
+  })
+}
+
 export function formatDistance(meters) {
   if (meters < 1000) {
     return `${Math.round(meters)} m`
@@ -139,7 +199,7 @@ export function formatDistance(meters) {
   return `${(meters / 1000).toFixed(1)} km`
 }
 
-function formatDuration(seconds) {
+export function formatDuration(seconds) {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) {
