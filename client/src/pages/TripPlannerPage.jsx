@@ -108,6 +108,7 @@ export default function TripPlannerPage() {
   const [showReservationModal, setShowReservationModal] = useState(false)
   const [editingReservation, setEditingReservation] = useState(null)
   const [route, setRoute] = useState(null)
+  const [routeIsCalculating, setRouteIsCalculating] = useState(false)
   const [routeInfo, setRouteInfo] = useState(null) // unused legacy
   const [routeSegments, setRouteSegments] = useState([]) // { from, to, walkingText, drivingText }
   const [fitKey, setFitKey] = useState(0)
@@ -189,35 +190,48 @@ export default function TripPlannerPage() {
 
   const routeCalcEnabled = useSettingsStore(s => s.settings.route_calculation) !== false
   const routeAbortRef = useRef(null)
+  const routeCacheRef = useRef({}) // { cacheKey: { coordinates, segments } }
 
   const updateRouteForDay = useCallback(async (dayId) => {
-    // Abort any previous calculation
     if (routeAbortRef.current) routeAbortRef.current.abort()
 
-    if (!dayId) { setRoute(null); setRouteSegments([]); return }
+    if (!dayId) { setRoute(null); setRouteSegments([]); setRouteIsCalculating(false); return }
     const da = (tripStore.assignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index)
     const waypoints = da.map(a => a.place).filter(p => p?.lat && p?.lng)
-    if (waypoints.length < 2) { setRoute(null); setRouteSegments([]); return }
+    if (waypoints.length < 2) { setRoute(null); setRouteSegments([]); setRouteIsCalculating(false); return }
 
-    // Fallback to straight lines immediately
+    const cacheKey = waypoints.map(p => `${p.id}`).join('-')
+    const cached = routeCacheRef.current[cacheKey]
+
+    // Use cache if available
+    if (cached) {
+      setRoute(cached.coordinates)
+      setRouteSegments(cached.segments)
+      setRouteIsCalculating(false)
+      return
+    }
+
+    // Show dashed straight lines while calculating
     setRoute(waypoints.map(p => [p.lat, p.lng]))
-    if (!routeCalcEnabled) { setRouteSegments([]); return }
+    setRouteIsCalculating(true)
+    if (!routeCalcEnabled) { setRouteSegments([]); setRouteIsCalculating(false); return }
 
     const controller = new AbortController()
     routeAbortRef.current = controller
 
     try {
-      // Fetch actual road path + per-leg segments in parallel
       const [routeResult, segments] = await Promise.all([
         calculateRoute(waypoints, 'driving', { signal: controller.signal }),
         calculateSegments(waypoints, { signal: controller.signal }),
       ])
       if (!controller.signal.aborted) {
+        routeCacheRef.current[cacheKey] = { coordinates: routeResult.coordinates, segments }
         setRoute(routeResult.coordinates)
         setRouteSegments(segments)
+        setRouteIsCalculating(false)
       }
     } catch (err) {
-      if (err.name !== 'AbortError') setRouteSegments([])
+      if (err.name !== 'AbortError') { setRouteSegments([]); setRouteIsCalculating(false) }
     }
   }, [tripStore, routeCalcEnabled])
 
@@ -321,8 +335,8 @@ export default function TripPlannerPage() {
       const dayItems = tripStore.assignments[String(dayId)] || []
       const ordered = orderedIds.map(id => dayItems.find(a => a.id === id)).filter(Boolean)
       const waypoints = ordered.map(a => a.place).filter(p => p?.lat && p?.lng)
-      if (waypoints.length >= 2) setRoute(waypoints.map(p => [p.lat, p.lng]))
-      else setRoute(null)
+      if (waypoints.length >= 2) { setRoute(waypoints.map(p => [p.lat, p.lng])); setRouteIsCalculating(true) }
+      else { setRoute(null); setRouteIsCalculating(false) }
       setRouteInfo(null)
     }
     catch { toast.error(t('trip.toast.reorderError')) }
@@ -467,6 +481,7 @@ export default function TripPlannerPage() {
               places={mapPlaces()}
               dayPlaces={dayPlaces}
               route={route}
+              routeIsCalculating={routeIsCalculating}
               routeSegments={routeSegments}
               flightArcs={flightArcs}
               selectedPlaceId={selectedPlaceId}

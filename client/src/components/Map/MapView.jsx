@@ -262,6 +262,7 @@ export function MapView({
   places = [],
   dayPlaces = [],
   route = null,
+  routeIsCalculating = false,
   routeSegments = [],
   flightArcs = [],
   selectedPlaceId = null,
@@ -403,9 +404,10 @@ export function MapView({
             positions={route}
             color="#111827"
             weight={3}
-            opacity={0.8}
+            opacity={routeIsCalculating ? 0.4 : 0.8}
+            dashArray={routeIsCalculating ? '8, 6' : undefined}
           />
-          {routeSegments.map((seg, i) => (
+          {!routeIsCalculating && routeSegments.map((seg, i) => (
             <RouteLabel key={i} midpoint={seg.mid} distanceText={seg.distanceText} walkingText={seg.walkingText} drivingText={seg.drivingText} />
           ))}
         </>
