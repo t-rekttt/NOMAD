@@ -19,6 +19,7 @@
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
     "node-fetch": "^2.7.0",
+    "open-location-code": "^1.0.3",
     "unzipper": "^0.12.3",
     "uuid": "^9.0.0",
     "wanakana": "^5.3.1",

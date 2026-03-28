@@ -538,7 +538,7 @@ const en = {
   'places.formNotesPlaceholder': 'Personal notes...',
   'places.formReservation': 'Reservation',
   'places.reservationNotesPlaceholder': 'Reservation notes, confirmation number...',
-  'places.mapsSearchPlaceholder': 'Search places...',
+  'places.mapsSearchPlaceholder': 'Search or paste Google Maps URL / Plus Code...',
   'places.mapsSearchError': 'Place search failed.',
   'places.osmHint': 'Using OpenStreetMap search (no photos, opening hours, or ratings). Add a Google API key in settings for full details.',
   'places.osmActive': 'Search via OpenStreetMap (no photos, ratings or opening hours). Add a Google API key in Settings for enhanced data.',

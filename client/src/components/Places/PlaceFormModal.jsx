@@ -25,7 +25,7 @@ export default function PlaceFormModal({
 }) {
   const isEditing = !!place
   const { user, hasMapsKey } = useAuthStore()
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const toast = useToast()
 
   const [categories, setCategories] = useState(initialCategories)
@@ -128,10 +128,26 @@ export default function PlaceFormModal({
 
   const [searchSource, setSearchSource] = useState(null)
 
+  const looksLikeParseable = (s) => {
+    const t = s.trim()
+    if (/^https?:\/\/(maps\.google|google\.com\/maps|goo\.gl|maps\.app)/i.test(t)) return true
+    if (/^[2-9CFGHJMPQRVWX]{2,8}\+[2-9CFGHJMPQRVWX]{2,3}$/i.test(t)) return true
+    if (/^-?[0-9]+\.?[0-9]*,\s*-?[0-9]+\.?[0-9]*$/.test(t)) return true
+    return false
+  }
+
   const handleMapSearch = async () => {
     if (!mapQuery.trim()) return
     setMapSearching(true)
     try {
+      if (looksLikeParseable(mapQuery)) {
+        const parsed = await mapsApi.parse(mapQuery, language)
+        if (parsed.parsed && parsed.place) {
+          selectMapPlace(parsed.place)
+          setMapSearching(false)
+          return
+        }
+      }
       const data = await mapsApi.search(mapQuery)
       setMapResults(data.places || [])
       setSearchSource(data.source || 'google')

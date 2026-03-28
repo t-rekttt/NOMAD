@@ -64,10 +64,29 @@ export default function PlaceFormModal({
     setForm(prev => ({ ...prev, [field]: value }))
   }
 
+  // Detect if input looks like a Google Maps URL, Plus Code, or raw coordinates
+  const looksLikeParseable = (s) => {
+    const t = s.trim()
+    if (/^https?:\/\/(maps\.google|google\.com\/maps|goo\.gl|maps\.app)/i.test(t)) return true
+    if (/^[2-9CFGHJMPQRVWX]{2,8}\+[2-9CFGHJMPQRVWX]{2,3}$/i.test(t)) return true
+    if (/^-?[0-9]+\.?[0-9]*,\s*-?[0-9]+\.?[0-9]*$/.test(t)) return true
+    return false
+  }
+
   const handleMapsSearch = async () => {
     if (!mapsSearch.trim()) return
     setIsSearchingMaps(true)
     try {
+      // Try parsing URL/Plus Code/coordinates first
+      if (looksLikeParseable(mapsSearch)) {
+        const parsed = await mapsApi.parse(mapsSearch, language)
+        if (parsed.parsed && parsed.place) {
+          handleSelectMapsResult(parsed.place)
+          setIsSearchingMaps(false)
+          return
+        }
+      }
+      // Fall back to normal search
       const result = await mapsApi.search(mapsSearch, language)
       setMapsResults(result.places || [])
     } catch (err) {
@@ -82,8 +101,8 @@ export default function PlaceFormModal({
       ...prev,
       name: result.name || prev.name,
       address: result.address || prev.address,
-      lat: result.lat || prev.lat,
-      lng: result.lng || prev.lng,
+      lat: result.lat ?? prev.lat,
+      lng: result.lng ?? prev.lng,
       google_place_id: result.google_place_id || prev.google_place_id,
     }))
     setMapsResults([])

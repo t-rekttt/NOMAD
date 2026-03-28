@@ -143,6 +143,7 @@ export const addonsApi = {
 
 export const mapsApi = {
   search: (query, lang) => apiClient.post(`/maps/search?lang=${lang || 'en'}`, { query }).then(r => r.data),
+  parse: (input, lang) => apiClient.post('/maps/parse', { input, lang }).then(r => r.data),
   details: (placeId, lang) => apiClient.get(`/maps/details/${placeId}`, { params: { lang } }).then(r => r.data),
   placePhoto: (placeId) => apiClient.get(`/maps/place-photo/${placeId}`).then(r => r.data),
 }

@@ -538,7 +538,7 @@ const de = {
   'places.formNotesPlaceholder': 'Persönliche Notizen...',
   'places.formReservation': 'Reservierung',
   'places.reservationNotesPlaceholder': 'Reservierungsnotizen, Bestätigungsnummer...',
-  'places.mapsSearchPlaceholder': 'Ortssuche...',
+  'places.mapsSearchPlaceholder': 'Suchen oder Google Maps URL / Plus Code einfügen...',
   'places.mapsSearchError': 'Ortssuche fehlgeschlagen.',
   'places.osmHint': 'OpenStreetMap-Suche aktiv (ohne Bilder, Öffnungszeiten, Bewertungen). Für erweiterte Daten Google API Key in den Einstellungen hinterlegen.',
   'places.osmActive': 'Suche via OpenStreetMap (ohne Bilder, Bewertungen & Öffnungszeiten). Google API Key in den Einstellungen hinterlegen für erweiterte Daten.',

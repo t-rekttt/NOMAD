@@ -2,6 +2,7 @@ const express = require('express');
 const fetch = require('node-fetch');
 const { db } = require('../db/database');
 const { authenticate } = require('../middleware/auth');
+const { OpenLocationCode } = require('open-location-code');
 
 const router = express.Router();
 
@@ -223,5 +224,119 @@ router.get('/place-photo/:placeId', authenticate, async (req, res) => {
     res.status(500).json({ error: 'Error fetching photo' });
   }
 });
+
+// POST /api/maps/parse — extract coordinates from Google Maps URL or Plus Code
+const olc = new OpenLocationCode();
+
+function parseGoogleMapsInput(input) {
+  if (!input || typeof input !== 'string') return null
+  const trimmed = input.trim()
+
+  // Try Plus Code (contains + and alphanumeric, 4-12 chars before +)
+  if (/^[2-9CFGHJMPQRVWX]{2,8}\+[2-9CFGHJMPQRVWX]{2,3}$/i.test(trimmed)) {
+    try {
+      if (olc.isFull(trimmed.toUpperCase())) {
+        const decoded = olc.decode(trimmed.toUpperCase())
+        return { lat: decoded.latitudeCenter, lng: decoded.longitudeCenter, source: 'plus_code' }
+      }
+    } catch { /* not a valid plus code */ }
+  }
+
+  // Try Google Maps URL patterns
+  try {
+    // Pattern 1: @lat,lng in URL path or fragment
+    const atMatch = trimmed.match(/@(-?[0-9]+\.?[0-9]*),(-?[0-9]+\.?[0-9]*)/)
+    if (atMatch) {
+      const lat = parseFloat(atMatch[1])
+      const lng = parseFloat(atMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, source: 'google_maps_url' }
+      }
+    }
+
+    // Pattern 2: /place/ URLs with coords in path — /place/Name/@lat,lng
+    // Already handled above by @match
+
+    // Pattern 3: query parameters (q, ll, center, query)
+    const url = new URL(trimmed)
+    for (const param of ['q', 'll', 'center', 'query']) {
+      const val = url.searchParams.get(param)
+      if (val) {
+        const coordMatch = val.match(/^(-?[0-9]+\.?[0-9]*),\s*(-?[0-9]+\.?[0-9]*)$/)
+        if (coordMatch) {
+          const lat = parseFloat(coordMatch[1])
+          const lng = parseFloat(coordMatch[2])
+          if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+            return { lat, lng, source: 'google_maps_url' }
+          }
+        }
+      }
+    }
+
+    // Pattern 4: /dir/ paths with coordinates — extract first pair
+    const dirMatch = trimmed.match(/\/dir\/(-?[0-9]+\.?[0-9]*),(-?[0-9]+\.?[0-9]*)/)
+    if (dirMatch) {
+      const lat = parseFloat(dirMatch[1])
+      const lng = parseFloat(dirMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, source: 'google_maps_url' }
+      }
+    }
+  } catch { /* not a valid URL */ }
+
+  // Pattern 5: raw coordinates "lat, lng"
+  const rawCoord = trimmed.match(/^(-?[0-9]+\.?[0-9]*),\s*(-?[0-9]+\.?[0-9]*)$/)
+  if (rawCoord) {
+    const lat = parseFloat(rawCoord[1])
+    const lng = parseFloat(rawCoord[2])
+    if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng, source: 'coordinates' }
+    }
+  }
+
+  return null
+}
+
+// Reverse geocode via Nominatim to get a place name for parsed coordinates
+async function reverseGeocode(lat, lng, lang) {
+  try {
+    const params = new URLSearchParams({
+      lat: String(lat), lon: String(lng),
+      format: 'json', addressdetails: '1', zoom: '18',
+      'accept-language': lang || 'en',
+    })
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`, {
+      headers: { 'User-Agent': 'NOMAD Travel Planner (https://github.com/mauriceboe/NOMAD)' },
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return {
+      name: data.name || data.address?.tourism || data.address?.amenity || data.address?.road || '',
+      address: data.display_name || '',
+    }
+  } catch { return null }
+}
+
+router.post('/parse', authenticate, async (req, res) => {
+  const { input, lang } = req.body
+  if (!input || typeof input !== 'string') return res.status(400).json({ error: 'Input is required' })
+  if (input.length > 2048) return res.status(400).json({ error: 'Input too long' })
+
+  const parsed = parseGoogleMapsInput(input)
+  if (!parsed) return res.json({ parsed: false })
+
+  // Reverse geocode to get place name and address
+  const geo = await reverseGeocode(parsed.lat, parsed.lng, lang)
+  res.json({
+    parsed: true,
+    place: {
+      lat: parsed.lat,
+      lng: parsed.lng,
+      name: geo?.name || '',
+      address: geo?.address || '',
+      source: parsed.source,
+    },
+  })
+})
 
 module.exports = router;
