@@ -244,7 +244,17 @@ function parseGoogleMapsInput(input) {
 
   // Try Google Maps URL patterns
   try {
-    // Pattern 1: @lat,lng in URL path or fragment
+    // Pattern 1: !3d{lat}!4d{lng} in data param — actual place coordinates (preferred)
+    const placeMatch = trimmed.match(/!3d(-?[0-9]+\.?[0-9]*)!4d(-?[0-9]+\.?[0-9]*)/)
+    if (placeMatch) {
+      const lat = parseFloat(placeMatch[1])
+      const lng = parseFloat(placeMatch[2])
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng, source: 'google_maps_url' }
+      }
+    }
+
+    // Pattern 2: @lat,lng in URL path (viewport center — fallback if !3d/!4d absent)
     const atMatch = trimmed.match(/@(-?[0-9]+\.?[0-9]*),(-?[0-9]+\.?[0-9]*)/)
     if (atMatch) {
       const lat = parseFloat(atMatch[1])
@@ -253,9 +263,6 @@ function parseGoogleMapsInput(input) {
         return { lat, lng, source: 'google_maps_url' }
       }
     }
-
-    // Pattern 2: /place/ URLs with coords in path — /place/Name/@lat,lng
-    // Already handled above by @match
 
     // Pattern 3: query parameters (q, ll, center, query)
     const url = new URL(trimmed)
@@ -325,6 +332,13 @@ router.post('/parse', authenticate, async (req, res) => {
   const parsed = parseGoogleMapsInput(input)
   if (!parsed) return res.json({ parsed: false })
 
+  // Extract place name from /place/Name/ in URL path if available
+  let urlName = ''
+  try {
+    const placePathMatch = input.match(/\/place\/([^/@]+)/)
+    if (placePathMatch) urlName = decodeURIComponent(placePathMatch[1].replace(/\+/g, ' '))
+  } catch { /* ignore decode errors */ }
+
   // Reverse geocode to get place name and address
   const geo = await reverseGeocode(parsed.lat, parsed.lng, lang)
   res.json({
@@ -332,7 +346,7 @@ router.post('/parse', authenticate, async (req, res) => {
     place: {
       lat: parsed.lat,
       lng: parsed.lng,
-      name: geo?.name || '',
+      name: urlName || geo?.name || '',
       address: geo?.address || '',
       source: parsed.source,
     },
