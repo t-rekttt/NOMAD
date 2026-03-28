@@ -1,6 +1,28 @@
 // Transport instruction PDF via browser print window
 import { calculateSegmentsWithSteps, generateLegUrl, generateQrDataUrl } from '../Map/RouteCalculator'
 
+function hasNonLatin(str) {
+  return str && /[^\u0000-\u024F\u1E00-\u1EFF\s\d.,\-/()#]/.test(str)
+}
+
+// Batch romanize street names via server-side API (kuromoji runs on Node.js)
+async function batchRomanize(streets) {
+  const nonLatin = streets.filter(s => s && hasNonLatin(s))
+  if (nonLatin.length === 0) return {}
+  try {
+    const res = await fetch('/api/romanize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texts: nonLatin }),
+    })
+    if (!res.ok) return {}
+    const { results } = await res.json()
+    return results || {}
+  } catch {
+    return {}
+  }
+}
+
 function escHtml(str) {
   if (!str) return ''
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -17,16 +39,24 @@ function placeLabel(name, address) {
   return `${n}<br/><span class="place-address">${escHtml(address)}</span>`
 }
 
-function buildLegHtml(seg, i, fromName, toName, fromAddress, toAddress, qrDataUrl) {
+function buildLegHtml(seg, i, fromName, toName, fromAddress, toAddress, qrDataUrl, romanizedStreets) {
 
   const stepsHtml = seg.steps.length > 0
-    ? seg.steps.map((s, si) => `
+    ? seg.steps.map((s, si) => {
+      const rom = romanizedStreets?.[s.street] || ''
+      const streetCell = [
+        s.ref ? `<span class="road-ref">${escHtml(s.ref)}</span> ` : '',
+        escHtml(s.street),
+        rom ? ` <span class="romaji">${escHtml(rom)}</span>` : '',
+      ].join('')
+      return `
       <tr class="${si % 2 === 0 ? 'row-even' : ''}">
         <td class="step-num">${si + 1}</td>
         <td class="step-action">${escHtml(s.action)}</td>
-        <td class="step-street">${escHtml(s.street)}</td>
+        <td class="step-street">${streetCell}</td>
         <td class="step-dist">${escHtml(s.distance)}</td>
-      </tr>`).join('')
+      </tr>`
+    }).join('')
     : '<tr><td colspan="4" class="no-steps">Direct route — follow the road</td></tr>'
 
   return `
@@ -48,7 +78,7 @@ function buildLegHtml(seg, i, fromName, toName, fromAddress, toAddress, qrDataUr
         <div class="leg-directions">
           <table class="steps-table">
             <thead>
-              <tr><th class="th-num">#</th><th>Action</th><th>Street</th><th class="th-dist">Distance</th></tr>
+              <tr><th class="th-num">#</th><th>Action</th><th>Road / Street</th><th class="th-dist">Distance</th></tr>
             </thead>
             <tbody>${stepsHtml}</tbody>
           </table>
@@ -74,7 +104,7 @@ const CSS = `
   @page { margin: 14mm 12mm; }
   .page-break { page-break-before: always; }
 
-  /* ── Cover ──────────────────────────────────── */
+  /* Cover */
   .cover {
     width: 100%; min-height: 220px;
     background: #0f172a;
@@ -101,16 +131,12 @@ const CSS = `
     font-size: 12px; color: rgba(255,255,255,0.5);
     text-align: center; line-height: 1.5;
   }
-  .cover-stats {
-    display: flex; gap: 28px; margin-top: 20px;
-  }
-  .cover-stat {
-    text-align: center;
-  }
+  .cover-stats { display: flex; gap: 28px; margin-top: 20px; }
+  .cover-stat { text-align: center; }
   .cover-stat-num { font-size: 22px; font-weight: 700; color: #fff; line-height: 1; }
   .cover-stat-lbl { font-size: 8px; font-weight: 500; color: rgba(255,255,255,0.35); letter-spacing: 1px; margin-top: 3px; text-transform: uppercase; }
 
-  /* ── Day divider ────────────────────────────── */
+  /* Day divider */
   .day-divider {
     page-break-before: always;
     background: #0f172a; padding: 12px 24px;
@@ -126,7 +152,7 @@ const CSS = `
   .day-divider h2 { font-size: 13px; font-weight: 600; color: #fff; flex: 1; margin: 0; }
   .day-divider .day-meta { font-size: 9px; color: rgba(255,255,255,0.45); }
 
-  /* ── Leg card ───────────────────────────────── */
+  /* Leg card */
   .leg {
     margin-bottom: 16px; border: 1px solid #e2e8f0; border-radius: 12px;
     overflow: hidden; page-break-inside: avoid; background: #fff;
@@ -163,12 +189,10 @@ const CSS = `
     box-shadow: 0 1px 4px rgba(0,0,0,0.06);
   }
   .qr-frame img { display: block; border-radius: 4px; }
-  .qr-label {
-    font-size: 8px; color: #94a3b8; text-align: center; line-height: 1.3;
-  }
+  .qr-label { font-size: 8px; color: #94a3b8; text-align: center; line-height: 1.3; }
   .qr-label strong { color: #475569; }
 
-  /* ── Steps table ────────────────────────────── */
+  /* Steps table */
   .steps-table { width: 100%; border-collapse: collapse; font-size: 10px; }
   .steps-table th {
     text-align: left; font-weight: 600; font-size: 8px; color: #94a3b8;
@@ -182,10 +206,12 @@ const CSS = `
   .step-num { color: #cbd5e1; font-size: 9px; font-weight: 600; }
   .step-action { font-weight: 500; color: #1e293b; }
   .step-street { color: #64748b; }
+  .road-ref { display: inline-block; font-size: 8px; font-weight: 700; color: #2563eb; background: #eff6ff; border-radius: 3px; padding: 0 5px; margin-right: 3px; vertical-align: middle; }
+  .romaji { font-size: 8px; color: #94a3b8; font-style: italic; display: block; margin-top: 1px; }
   .step-dist { text-align: right; color: #94a3b8; white-space: nowrap; font-weight: 500; }
   .no-steps { text-align: center; color: #94a3b8; padding: 14px; font-style: italic; }
 
-  /* ── Footer ─────────────────────────────────── */
+  /* Footer */
   .pdf-footer {
     position: fixed; bottom: 16px; left: 0; right: 0;
     text-align: center; font-size: 7px; color: #cbd5e1;
@@ -196,7 +222,6 @@ const CSS = `
 const ROUTE_ICON_SVG = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M12 19h4.5a3.5 3.5 0 0 0 0-7h-9a3.5 3.5 0 0 1 0-7H12"/></svg>`
 
 function showPreview(html, title) {
-  // Remove any existing preview
   document.getElementById('transport-pdf-overlay')?.remove()
 
   const overlay = document.createElement('div')
@@ -270,15 +295,17 @@ export async function downloadTransportPDF({ day, waypoints, t: _t, locale: _loc
   const totalDist = segments.reduce((s, seg) => s + seg.distance, 0)
   const totalDistText = totalDist >= 1000 ? `${(totalDist / 1000).toFixed(1)} km` : `${Math.round(totalDist)} m`
 
-  // Pre-generate all QR codes locally (no network)
-  const qrDataUrls = await Promise.all(
-    segments.map(seg => generateQrDataUrl(generateLegUrl(seg.from, seg.to), 140))
-  )
+  // Generate QR codes and romanize streets in parallel
+  const allStreets = [...new Set(segments.flatMap(seg => seg.steps.map(s => s.street)).filter(Boolean))]
+  const [qrDataUrls, romanizedStreets] = await Promise.all([
+    Promise.all(segments.map(seg => generateQrDataUrl(generateLegUrl(seg.from, seg.to), 140))),
+    batchRomanize(allStreets),
+  ])
 
   const legsHtml = segments.map((seg, i) => {
     const fromWp = waypoints[i]
     const toWp = waypoints[i + 1]
-    return buildLegHtml(seg, i, fromWp.name || `Stop ${i + 1}`, toWp.name || `Stop ${i + 2}`, fromWp.address, toWp.address, qrDataUrls[i])
+    return buildLegHtml(seg, i, fromWp.name || `Stop ${i + 1}`, toWp.name || `Stop ${i + 2}`, fromWp.address, toWp.address, qrDataUrls[i], romanizedStreets)
   }).join('')
 
   const coverHtml = `
@@ -328,20 +355,23 @@ export async function downloadTripTransportPDF({ trip, days, assignments, t: _t,
     const dateStr = day.date ? shortDate(day.date, loc) : ''
     const title = day.title || dayLabel
 
-    const qrDataUrls = await Promise.all(
-      segments.map(seg => generateQrDataUrl(generateLegUrl(seg.from, seg.to), 140))
-    )
+    const dayStreets = [...new Set(segments.flatMap(seg => seg.steps.map(s => s.street)).filter(Boolean))]
+    const [qrDataUrls, romanizedStreets] = await Promise.all([
+      Promise.all(segments.map(seg => generateQrDataUrl(generateLegUrl(seg.from, seg.to), 140))),
+      batchRomanize(dayStreets),
+    ])
 
     const legsHtml = segments.map((seg, i) => {
       const fromWp = waypoints[i]
       const toWp = waypoints[i + 1]
-      return buildLegHtml(seg, i, fromWp.name || `Stop ${i + 1}`, toWp.name || `Stop ${i + 2}`, fromWp.address, toWp.address, qrDataUrls[i])
+      return buildLegHtml(seg, i, fromWp.name || `Stop ${i + 1}`, toWp.name || `Stop ${i + 2}`, fromWp.address, toWp.address, qrDataUrls[i], romanizedStreets)
     }).join('')
 
+    const hasCustomTitle = day.title && day.title !== dayLabel
     sections.push(`
       <div class="day-divider">
         <span class="day-tag">${escHtml(dayLabel)}</span>
-        <h2>${escHtml(title)}</h2>
+        ${hasCustomTitle ? `<h2>${escHtml(title)}</h2>` : ''}
         ${dateStr ? `<span class="day-meta">${escHtml(dateStr)}</span>` : ''}
       </div>
       ${legsHtml}`)

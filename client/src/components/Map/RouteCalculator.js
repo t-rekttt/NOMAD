@@ -178,7 +178,8 @@ export async function calculateSegmentsWithSteps(waypoints, { signal } = {}) {
           m.type === 'fork' ? `Take ${dir} fork` :
           `${m.type}${dir ? ' ' + dir : ''}`
         const street = s.name || ''
-        return { action, street, distance: formatDistance(s.distance) }
+        const ref = s.ref || ''
+        return { action, street, ref, distance: formatDistance(s.distance) }
       })
     return {
       from, to,

@@ -111,6 +111,7 @@ app.use('/api/maps', mapsRoutes);
 app.use('/api/weather', weatherRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/backup', backupRoutes);
+app.use('/api/romanize', require('./routes/romanize'));
 
 // Serve static files in production
 if (process.env.NODE_ENV === 'production') {
