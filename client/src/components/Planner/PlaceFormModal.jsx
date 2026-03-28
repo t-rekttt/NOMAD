@@ -67,7 +67,7 @@ export default function PlaceFormModal({
   // Detect if input looks like a Google Maps URL, Plus Code, or raw coordinates
   const looksLikeParseable = (s) => {
     const t = s.trim()
-    if (/^https?:\/\/(maps\.google|google\.com\/maps|goo\.gl|maps\.app)/i.test(t)) return true
+    if (/^https?:\/\/(www\.)?(maps\.google|google\.com\/maps|goo\.gl|maps\.app)/i.test(t)) return true
     if (/^[2-9CFGHJMPQRVWX]{2,8}\+[2-9CFGHJMPQRVWX]{2,3}$/i.test(t)) return true
     if (/^-?[0-9]+\.?[0-9]*,\s*-?[0-9]+\.?[0-9]*$/.test(t)) return true
     return false
