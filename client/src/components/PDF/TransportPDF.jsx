@@ -44,11 +44,12 @@ function buildLegHtml(seg, i, fromName, toName, fromAddress, toAddress, qrDataUr
   const stepsHtml = seg.steps.length > 0
     ? seg.steps.map((s, si) => {
       const rom = romanizedStreets?.[s.street] || ''
-      const streetCell = [
+      const hasStreet = s.street || s.ref
+      const streetCell = hasStreet ? [
         s.ref ? `<span class="road-ref">${escHtml(s.ref)}</span> ` : '',
         escHtml(s.street),
         rom ? ` <span class="romaji">${escHtml(rom)}</span>` : '',
-      ].join('')
+      ].join('') : '<span class="unnamed">—</span>'
       return `
       <tr class="${si % 2 === 0 ? 'row-even' : ''}">
         <td class="step-num">${si + 1}</td>
@@ -209,6 +210,7 @@ const CSS = `
   .road-ref { display: inline-block; font-size: 8px; font-weight: 700; color: #2563eb; background: #eff6ff; border-radius: 3px; padding: 0 5px; margin-right: 3px; vertical-align: middle; }
   .romaji { font-size: 8px; color: #94a3b8; font-style: italic; display: block; margin-top: 1px; }
   .step-dist { text-align: right; color: #94a3b8; white-space: nowrap; font-weight: 500; }
+  .unnamed { color: #cbd5e1; }
   .no-steps { text-align: center; color: #94a3b8; padding: 14px; font-style: italic; }
 
   /* Footer */
@@ -263,7 +265,7 @@ function wrapPage(loc, title, coverHtml, bodyHtml) {
 <html lang="${loc}">
 <head>
 <meta charset="UTF-8">
-<title>Transportation Instructions — ${escHtml(title)}</title>
+<title>Navigation — ${escHtml(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
 <style>${CSS}</style>
 </head>
@@ -311,7 +313,7 @@ export async function downloadTransportPDF({ day, waypoints, t: _t, locale: _loc
   const coverHtml = `
     <div class="cover">
       <div class="cover-icon">${ROUTE_ICON_SVG}</div>
-      <div class="cover-label">Transportation Instructions</div>
+      <div class="cover-label">Navigation</div>
       <h1>${escHtml(title)}</h1>
       <div class="subtitle">${escHtml(dayLabel)}${dateStr ? ' — ' + escHtml(dateStr) : ''}</div>
       <div class="cover-stats">
@@ -321,7 +323,7 @@ export async function downloadTransportPDF({ day, waypoints, t: _t, locale: _loc
       </div>
     </div>`
 
-  showPreview(wrapPage(loc, title, coverHtml, legsHtml), `Transportation Instructions — ${title}`)
+  showPreview(wrapPage(loc, title, coverHtml, legsHtml), `Navigation — ${title}`)
 }
 
 // Whole-trip transport PDF
@@ -388,7 +390,7 @@ export async function downloadTripTransportPDF({ trip, days, assignments, t: _t,
   const coverHtml = `
     <div class="cover">
       <div class="cover-icon">${ROUTE_ICON_SVG}</div>
-      <div class="cover-label">Transportation Instructions</div>
+      <div class="cover-label">Navigation</div>
       <h1>${escHtml(tripTitle)}</h1>
       <div class="subtitle">${sections.length} ${sections.length === 1 ? 'day' : 'days'} with navigation</div>
       <div class="cover-stats">
@@ -398,5 +400,5 @@ export async function downloadTripTransportPDF({ trip, days, assignments, t: _t,
       </div>
     </div>`
 
-  showPreview(wrapPage(loc, tripTitle, coverHtml, sections.join('')), `Transportation Instructions — ${tripTitle}`)
+  showPreview(wrapPage(loc, tripTitle, coverHtml, sections.join('')), `Navigation — ${tripTitle}`)
 }

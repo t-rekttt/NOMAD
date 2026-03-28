@@ -499,16 +499,16 @@ export default function DayPlanSidebar({
                 toast.error('Transport PDF error: ' + (e?.message || String(e)))
               }
             }}
-            title="Transportation instruction PDF"
+            title="Navigation PDF"
             style={{
-              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5,
-              padding: '5px 10px', borderRadius: 8, border: 'none',
+              flexShrink: 0, display: 'flex', alignItems: 'center', gap: 4,
+              padding: '5px 8px', borderRadius: 8, border: 'none',
               background: 'var(--accent)', color: 'var(--accent-text)', fontSize: 11, fontWeight: 500,
-              cursor: 'pointer', fontFamily: 'inherit',
+              cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
             }}
           >
-            <Route size={13} strokeWidth={2} />
-            Transportation instruction PDF
+            <Route size={12} strokeWidth={2} />
+            Navigation PDF
           </button>
         </div>
       </div>
@@ -717,12 +717,12 @@ export default function DayPlanSidebar({
                                 {daySegments?._loading ? (
                                   <span style={{ opacity: 0.5 }}>...</span>
                                 ) : segData ? (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 3, flexWrap: 'nowrap', whiteSpace: 'nowrap', overflow: 'hidden' }}>
                                     <span>{segData.distanceText}</span>
                                     <span style={{ opacity: 0.3 }}>·</span>
-                                    <span title="Walking" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Footprints size={9} strokeWidth={2} /> {segData.walkingText}</span>
+                                    <span title="Walking" style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}><Footprints size={9} strokeWidth={2} />{segData.walkingText}</span>
                                     <span style={{ opacity: 0.3 }}>·</span>
-                                    <span title="Driving" style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}><Car size={9} strokeWidth={2} /> {segData.drivingText}</span>
+                                    <span title="Driving" style={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}><Car size={9} strokeWidth={2} />{segData.drivingText}</span>
                                     <button
                                       title="QR Navigation"
                                       onClick={async () => {
@@ -731,9 +731,9 @@ export default function DayPlanSidebar({
                                         const qrDataUrl = await generateQrDataUrl(url, 180)
                                         setQrPopover({ key: pairKey, url, qrDataUrl, from: prevCoordPlace.name, to: place.name })
                                       }}
-                                      style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', color: qrPopover?.key === pairKey ? 'var(--text-primary)' : 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', lineHeight: 1, borderRadius: 4, marginLeft: 2 }}
+                                      style={{ background: 'none', border: 'none', padding: '1px 2px', cursor: 'pointer', color: qrPopover?.key === pairKey ? 'var(--text-primary)' : 'var(--text-faint)', display: 'inline-flex', alignItems: 'center', lineHeight: 1, borderRadius: 4, flexShrink: 0 }}
                                     >
-                                      <QrCode size={13} strokeWidth={2} />
+                                      <QrCode size={11} strokeWidth={2} />
                                     </button>
                                   </span>
                                 ) : null}
@@ -1055,13 +1055,13 @@ export default function DayPlanSidebar({
                           const waypoints = assignments.map(a => a.place).filter(p => p?.lat && p?.lng)
                           if (waypoints.length < 2) return
                           downloadTransportPDF({ day, waypoints, t, locale })
-                        }} title="Transportation instruction PDF" style={{
+                        }} title="Navigation PDF" style={{
                           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
-                          padding: '6px 10px', fontSize: 11, fontWeight: 500, borderRadius: 8,
-                          border: 'none', background: 'var(--accent)', color: 'var(--accent-text)', cursor: 'pointer', fontFamily: 'inherit',
+                          padding: '6px 8px', fontSize: 11, fontWeight: 500, borderRadius: 8,
+                          border: 'none', background: 'var(--accent)', color: 'var(--accent-text)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
                         }}>
                           <Route size={12} strokeWidth={2} />
-                          Transport PDF
+                          Nav PDF
                         </button>
                       </div>
                     </div>
