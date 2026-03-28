@@ -1,5 +1,5 @@
 // Transport instruction PDF via browser print window
-import { calculateSegmentsWithSteps, generateLegUrl, generateQrDataUrl } from '../Map/RouteCalculator'
+import { calculateSegmentsWithSteps, generateLegUrl, generateQrDataUrl, generateGoogleMapsUrl } from '../Map/RouteCalculator'
 
 function hasNonLatin(str) {
   return str && /[^\u0000-\u024F\u1E00-\u1EFF\s\d.,\-/()#]/.test(str)
@@ -136,6 +136,8 @@ const CSS = `
   .cover-stat { text-align: center; }
   .cover-stat-num { font-size: 22px; font-weight: 700; color: #fff; line-height: 1; }
   .cover-stat-lbl { font-size: 8px; font-weight: 500; color: rgba(255,255,255,0.35); letter-spacing: 1px; margin-top: 3px; text-transform: uppercase; }
+  .cover-qr { margin-top: 20px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .cover-qr img { display: block; border-radius: 6px; border: 2px solid rgba(255,255,255,0.15); }
 
   /* Day divider */
   .day-divider {
@@ -152,6 +154,11 @@ const CSS = `
   }
   .day-divider h2 { font-size: 13px; font-weight: 600; color: #fff; flex: 1; margin: 0; }
   .day-divider .day-meta { font-size: 9px; color: rgba(255,255,255,0.45); }
+  .day-divider .day-info { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+  .day-qr { flex-shrink: 0; display: flex; align-items: center; gap: 8px; margin-left: auto; }
+  .day-qr img { display: block; border-radius: 4px; border: 2px solid rgba(255,255,255,0.15); }
+  .day-qr-label { font-size: 7px; color: rgba(255,255,255,0.45); text-align: center; line-height: 1.2; white-space: nowrap; }
+  .day-qr-label strong { color: rgba(255,255,255,0.7); }
 
   /* Leg card */
   .leg {
@@ -297,10 +304,12 @@ export async function downloadTransportPDF({ day, waypoints, t: _t, locale: _loc
   const totalDist = segments.reduce((s, seg) => s + seg.distance, 0)
   const totalDistText = totalDist >= 1000 ? `${(totalDist / 1000).toFixed(1)} km` : `${Math.round(totalDist)} m`
 
-  // Generate QR codes and romanize streets in parallel
+  // Generate QR codes (per-leg + whole-day) and romanize streets in parallel
   const allStreets = [...new Set(segments.flatMap(seg => seg.steps.map(s => s.street)).filter(Boolean))]
-  const [qrDataUrls, romanizedStreets] = await Promise.all([
+  const dayMapsUrl = generateGoogleMapsUrl(waypoints)
+  const [qrDataUrls, dayQrDataUrl, romanizedStreets] = await Promise.all([
     Promise.all(segments.map(seg => generateQrDataUrl(generateLegUrl(seg.from, seg.to), 140))),
+    generateQrDataUrl(dayMapsUrl, 80),
     batchRomanize(allStreets),
   ])
 
@@ -320,6 +329,10 @@ export async function downloadTransportPDF({ day, waypoints, t: _t, locale: _loc
         <div class="cover-stat"><div class="cover-stat-num">${segments.length}</div><div class="cover-stat-lbl">${segments.length === 1 ? 'Leg' : 'Legs'}</div></div>
         <div class="cover-stat"><div class="cover-stat-num">${waypoints.length}</div><div class="cover-stat-lbl">Stops</div></div>
         <div class="cover-stat"><div class="cover-stat-num">${escHtml(totalDistText)}</div><div class="cover-stat-lbl">Total</div></div>
+      </div>
+      <div class="cover-qr">
+        <img src="${dayQrDataUrl}" alt="QR" width="80" height="80" />
+        <div class="day-qr-label">Scan for<br/><strong>full route</strong></div>
       </div>
     </div>`
 
@@ -358,8 +371,10 @@ export async function downloadTripTransportPDF({ trip, days, assignments, t: _t,
     const title = day.title || dayLabel
 
     const dayStreets = [...new Set(segments.flatMap(seg => seg.steps.map(s => s.street)).filter(Boolean))]
-    const [qrDataUrls, romanizedStreets] = await Promise.all([
+    const dayMapsUrl = generateGoogleMapsUrl(waypoints)
+    const [qrDataUrls, dayQrDataUrl, romanizedStreets] = await Promise.all([
       Promise.all(segments.map(seg => generateQrDataUrl(generateLegUrl(seg.from, seg.to), 140))),
+      generateQrDataUrl(dayMapsUrl, 80),
       batchRomanize(dayStreets),
     ])
 
@@ -372,9 +387,15 @@ export async function downloadTripTransportPDF({ trip, days, assignments, t: _t,
     const hasCustomTitle = day.title && day.title !== dayLabel
     sections.push(`
       <div class="day-divider">
-        <span class="day-tag">${escHtml(dayLabel)}</span>
-        ${hasCustomTitle ? `<h2>${escHtml(title)}</h2>` : ''}
-        ${dateStr ? `<span class="day-meta">${escHtml(dateStr)}</span>` : ''}
+        <div class="day-info">
+          <span class="day-tag">${escHtml(dayLabel)}</span>
+          ${hasCustomTitle ? `<h2>${escHtml(title)}</h2>` : ''}
+          ${dateStr ? `<span class="day-meta">${escHtml(dateStr)}</span>` : ''}
+        </div>
+        <div class="day-qr">
+          <div class="day-qr-label">Full route<br/><strong>${waypoints.length} stops</strong></div>
+          <img src="${dayQrDataUrl}" alt="QR" width="80" height="80" />
+        </div>
       </div>
       ${legsHtml}`)
   }
