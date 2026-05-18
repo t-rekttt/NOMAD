@@ -25,6 +25,7 @@
     "helmet": "^8.1.0",
     "jimp": "^1.6.1",
     "jsonwebtoken": "^9.0.2",
+    "kuromoji": "^0.1.2",
     "multer": "^2.1.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.5",
@@ -36,6 +37,7 @@
     "undici": "^7.0.0",
     "unzipper": "^0.12.3",
     "uuid": "^14.0.0",
+    "wanakana": "^5.3.1",
     "ws": "^8.19.0",
     "zod": "^4.3.6"
   },

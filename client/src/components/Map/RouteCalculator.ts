@@ -122,18 +122,117 @@ export async function calculateSegments(
   })
 }
 
-function formatDistance(meters: number): string {
+export function formatDistance(meters: number): string {
   if (meters < 1000) {
     return `${Math.round(meters)} m`
   }
   return `${(meters / 1000).toFixed(1)} km`
 }
 
-function formatDuration(seconds: number): string {
+export function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) {
     return `${h} h ${m} min`
   }
   return `${m} min`
+}
+
+export type Coord = { lat: number; lng: number }
+export type TravelMode = 'driving' | 'walking'
+
+/** Build a Google Maps directions URL for a single A → B leg. */
+export function generateLegUrl(from: Coord, to: Coord, mode: TravelMode = 'driving'): string {
+  return `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}&travelmode=${mode}`
+}
+
+/** Render the given text as a base64 PNG QR data URL (offline; no network). */
+export async function generateQrDataUrl(text: string, size = 200): Promise<string> {
+  const QRCode = (await import('qrcode')).default
+  return QRCode.toDataURL(text, { width: size, margin: 1 })
+}
+
+export interface SegmentStep {
+  action: string
+  street: string
+  ref: string
+  distance: string
+}
+
+export interface SegmentWithSteps {
+  from: Coord
+  to: Coord
+  distance: number
+  distanceText: string
+  walkingText: string
+  drivingText: string
+  steps: SegmentStep[]
+  mapsUrl: string
+}
+
+interface OsrmStep {
+  name?: string
+  ref?: string
+  distance: number
+  maneuver?: {
+    type?: string
+    modifier?: string
+  }
+}
+
+interface OsrmLeg {
+  distance: number
+  duration: number
+  steps?: OsrmStep[]
+}
+
+/** Per-leg travel times + turn-by-turn steps in a single OSRM request. */
+export async function calculateSegmentsWithSteps(
+  waypoints: Waypoint[],
+  { signal }: { signal?: AbortSignal } = {}
+): Promise<SegmentWithSteps[]> {
+  if (!waypoints || waypoints.length < 2) return []
+
+  const coords = waypoints.map((p) => `${p.lng},${p.lat}`).join(';')
+  const url = `${OSRM_BASE}/driving/${coords}?overview=false&geometries=geojson&steps=true&annotations=distance,duration`
+
+  const response = await fetch(url, { signal })
+  if (!response.ok) throw new Error('Route could not be calculated')
+
+  const data = await response.json()
+  if (data.code !== 'Ok' || !data.routes?.[0]) throw new Error('No route found')
+
+  return (data.routes[0].legs as OsrmLeg[]).map((leg, i): SegmentWithSteps => {
+    const from: Coord = { lat: waypoints[i].lat, lng: waypoints[i].lng }
+    const to: Coord = { lat: waypoints[i + 1].lat, lng: waypoints[i + 1].lng }
+    const walkingDuration = leg.distance / (5000 / 3600)
+    const steps: SegmentStep[] = (leg.steps || [])
+      .filter((s) => s.maneuver?.type !== 'depart' && s.maneuver?.type !== 'arrive')
+      .map((s) => {
+        const m = s.maneuver || {}
+        const dir = m.modifier ? m.modifier.replace(/-/g, ' ') : ''
+        const action =
+          m.type === 'turn' ? `Turn ${dir}` :
+          m.type === 'new name' ? 'Continue' :
+          m.type === 'roundabout' ? 'Take roundabout exit' :
+          m.type === 'merge' ? `Merge ${dir}` :
+          m.type === 'fork' ? `Take ${dir} fork` :
+          `${m.type ?? ''}${dir ? ' ' + dir : ''}`.trim()
+        return {
+          action,
+          street: s.name || '',
+          ref: s.ref || '',
+          distance: formatDistance(s.distance),
+        }
+      })
+    return {
+      from, to,
+      distance: leg.distance,
+      distanceText: formatDistance(leg.distance),
+      walkingText: formatDuration(walkingDuration),
+      drivingText: formatDuration(leg.duration),
+      steps,
+      mapsUrl: generateLegUrl(from, to),
+    }
+  })
 }

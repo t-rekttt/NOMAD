@@ -9,6 +9,7 @@ import { ChevronDown, ChevronRight, ChevronUp, ChevronsDownUp, ChevronsUpDown, N
 const RES_ICONS = { flight: Plane, hotel: Hotel, restaurant: Utensils, train: Train, car: Car, cruise: Ship, event: Ticket, tour: Users, other: FileText }
 import { assignmentsApi, reservationsApi } from '../../api/client'
 import { downloadTripPDF } from '../PDF/TripPDF'
+import { downloadTripNavigationPDF } from '../PDF/NavigationPDF'
 import { calculateRoute, generateGoogleMapsUrl, optimizeRoute } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
@@ -256,6 +257,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
   const [lockHoverId, setLockHoverId] = useState(null)
   const [undoHover, setUndoHover] = useState(false)
   const [pdfHover, setPdfHover] = useState(false)
+  const [navPdfHover, setNavPdfHover] = useState(false)
   const [icsHover, setIcsHover] = useState(false)
   const [hoveredAssignmentId, setHoveredAssignmentId] = useState<number | null>(null)
   const [dropTargetKey, _setDropTargetKey] = useState(null)
@@ -902,6 +904,43 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar({
                 border: '1px solid var(--border-faint, #e5e7eb)',
               }}>
                 {t('dayplan.pdfTooltip')}
+              </div>
+            )}
+          </div>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <button
+              onClick={async () => {
+                try {
+                  await downloadTripNavigationPDF({ trip, days, assignments, t, locale })
+                } catch (e) {
+                  console.error('Navigation PDF error:', e)
+                  toast.error('Navigation PDF error: ' + ((e as Error)?.message || String(e)))
+                }
+              }}
+              onMouseEnter={() => setNavPdfHover(true)}
+              onMouseLeave={() => setNavPdfHover(false)}
+              title={t('dayplan.navigationPdf')}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 10px', borderRadius: 8,
+                border: '1px solid var(--border-primary)', background: 'none',
+                color: 'var(--text-muted)', fontSize: 11, fontWeight: 500,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >
+              <RouteIcon size={13} strokeWidth={2} />
+              {t('dayplan.navigationPdf')}
+            </button>
+            {navPdfHover && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 200,
+                background: 'var(--bg-card, white)', color: 'var(--text-primary, #111827)',
+                fontSize: 11, fontWeight: 500, padding: '5px 10px',
+                borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                border: '1px solid var(--border-faint, #e5e7eb)',
+              }}>
+                {t('dayplan.navigationPdfTooltip')}
               </div>
             )}
           </div>

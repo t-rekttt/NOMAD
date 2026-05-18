@@ -1045,6 +1045,8 @@ const en: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.pdf': 'PDF',
   'dayplan.pdfTooltip': 'Export day plan as PDF',
   'dayplan.pdfError': 'Failed to export PDF',
+  'dayplan.navigationPdf': 'Navigation',
+  'dayplan.navigationPdfTooltip': 'Export turn-by-turn navigation PDF with QR codes',
 
   // Places Sidebar
   'places.addPlace': 'Add Place/Activity',

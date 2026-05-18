@@ -974,6 +974,8 @@ const de: Record<string, string | { name: string; category: string }[]> = {
   'dayplan.pdf': 'PDF',
   'dayplan.pdfTooltip': 'Tagesplan als PDF exportieren',
   'dayplan.pdfError': 'Fehler beim PDF-Export',
+  'dayplan.navigationPdf': 'Navigation',
+  'dayplan.navigationPdfTooltip': 'Turn-by-Turn-Navigation als PDF mit QR-Codes exportieren',
 
   // Places Sidebar
   'places.addPlace': 'Ort/Aktivität hinzufügen',

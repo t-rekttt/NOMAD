@@ -23,6 +23,7 @@ import categoriesRoutes from './routes/categories';
 import adminRoutes from './routes/admin';
 import mapsRoutes from './routes/maps';
 import airportsRoutes from './routes/airports';
+import romanizeRoutes from './routes/romanize';
 import filesRoutes from './routes/files';
 import reservationsRoutes from './routes/reservations';
 import dayNotesRoutes from './routes/dayNotes';
@@ -361,6 +362,7 @@ export function createApp(): express.Application {
   app.use('/api/photos', photoRoutes);
   app.use('/api/maps', mapsRoutes);
   app.use('/api/airports', airportsRoutes);
+  app.use('/api/romanize', romanizeRoutes);
   app.use('/api/weather', weatherRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/system-notices', systemNoticesRoutes);
