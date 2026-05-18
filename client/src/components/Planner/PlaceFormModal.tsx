@@ -44,6 +44,39 @@ function isGoogleMapsUrl(input: string): boolean {
   }
 }
 
+const PLUS_CODE_RE = /^[2-9CFGHJMPQRVWX]{2,8}\+[2-9CFGHJMPQRVWX]{2,3}$/i
+const BARE_COORDS_RE = /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/
+
+function decodePlusCode(input: string): { lat: number; lng: number } | null {
+  if (!PLUS_CODE_RE.test(input)) return null
+  try {
+    // open-location-code ships no .d.ts; minimal shape used here:
+    // new OpenLocationCode().isFull(code) and .decode(code) → { latitudeCenter, longitudeCenter }
+    const { OpenLocationCode } = require('open-location-code') as {
+      OpenLocationCode: new () => {
+        isFull: (code: string) => boolean
+        decode: (code: string) => { latitudeCenter: number; longitudeCenter: number }
+      }
+    }
+    const olc = new OpenLocationCode()
+    const upper = input.toUpperCase()
+    if (!olc.isFull(upper)) return null
+    const decoded = olc.decode(upper)
+    return { lat: decoded.latitudeCenter, lng: decoded.longitudeCenter }
+  } catch {
+    return null
+  }
+}
+
+function parseBareCoords(input: string): { lat: number; lng: number } | null {
+  const m = input.match(BARE_COORDS_RE)
+  if (!m) return null
+  const lat = parseFloat(m[1])
+  const lng = parseFloat(m[2])
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null
+  return { lat, lng }
+}
+
 const DEFAULT_FORM: PlaceFormData = {
   name: '',
   description: '',
@@ -153,7 +186,7 @@ export default function PlaceFormModal({
 
   // Autocomplete fetch — aborts any in-flight request before starting a new one
   const fetchSuggestions = useCallback(async (query: string) => {
-    if (query.length < 2 || isGoogleMapsUrl(query)) {
+    if (query.length < 2 || isGoogleMapsUrl(query) || PLUS_CODE_RE.test(query) || BARE_COORDS_RE.test(query)) {
       setAcSuggestions([])
       setAcHighlight(-1)
       return
@@ -178,7 +211,7 @@ export default function PlaceFormModal({
     if (acDebounceRef.current) clearTimeout(acDebounceRef.current)
 
     const trimmed = mapsSearch.trim()
-    if (trimmed.length < 2 || isGoogleMapsUrl(trimmed)) {
+    if (trimmed.length < 2 || isGoogleMapsUrl(trimmed) || PLUS_CODE_RE.test(trimmed) || BARE_COORDS_RE.test(trimmed)) {
       setAcSuggestions([])
       setAcHighlight(-1)
       return
@@ -199,8 +232,34 @@ export default function PlaceFormModal({
     if (!mapsSearch.trim()) return
     setIsSearchingMaps(true)
     try {
-      // Detect Google Maps URLs and resolve them directly
       const trimmed = mapsSearch.trim()
+
+      // Detect Plus Code or bare "lat, lng" → decode locally, reverse-geocode for name/address.
+      const decoded = decodePlusCode(trimmed) || parseBareCoords(trimmed)
+      if (decoded) {
+        let geoName = ''
+        let geoAddress = ''
+        try {
+          const r = await mapsApi.reverse(decoded.lat, decoded.lng, language)
+          geoName = r.name || ''
+          geoAddress = r.address || r.display_name || ''
+        } catch {
+          // Reverse geocode failed; still accept the coords.
+        }
+        setForm(prev => ({
+          ...prev,
+          name: geoName || prev.name,
+          address: geoAddress || prev.address,
+          lat: String(decoded.lat),
+          lng: String(decoded.lng),
+        }))
+        setMapsResults([])
+        setMapsSearch('')
+        toast.success(t('places.urlResolved'))
+        return
+      }
+
+      // Detect Google Maps URLs and resolve them directly
       if (isGoogleMapsUrl(trimmed)) {
         const resolved = await mapsApi.resolveUrl(trimmed)
         if (resolved.lat && resolved.lng) {
